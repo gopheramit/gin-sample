@@ -1,7 +1,7 @@
 package main
 
 func main() {
-	r := RegisterRoutes()
+	r := registerRoutes()
 
 	r.Run(":3000")
 
