@@ -9,12 +9,37 @@ import (
 
 func registerRoutes() *gin.Engine {
 	r := gin.Default()
+
+	r.Use(loginMiddleware)
+
 	r.LoadHTMLGlob("templates/**/*.html")
-	r.GET("/", func(c *gin.Context) {
+	r.Any("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)
 	})
 
-	r.GET("/login", func(c *gin.Context) {
+	r.Any("/login", func(c *gin.Context) {
+		employeeNumber := c.PostForm("employeeNumber")
+		password := c.PostForm("password")
+
+		for _, identity := range identities {
+			if identity.employeeNumber == employeeNumber &&
+				identity.password == password {
+				lc := loginCookie{
+					value:      employeeNumber,
+					expiration: time.Now().Add(24 * time.Hour),
+					origin:     c.Request.RemoteAddr,
+				}
+
+				loginCookies[lc.value] = &lc
+
+				maxAge := lc.expiration.Unix() - time.Now().Unix()
+				c.SetCookie(loginCookieName, lc.value, int(maxAge), "", "", false, true)
+
+				c.Redirect(http.StatusTemporaryRedirect, "/")
+				return
+			}
+		}
+
 		c.HTML(http.StatusOK, "login.html", nil)
 	})
 
@@ -32,6 +57,7 @@ func registerRoutes() *gin.Engine {
 				"TimesOff": timesOff,
 			})
 	})
+
 	r.POST("/employees/:id/vacation/new", func(c *gin.Context) {
 		var timeOff TimeOff
 		err := c.BindJSON(&timeOff)
@@ -53,6 +79,7 @@ func registerRoutes() *gin.Engine {
 
 		c.JSON(http.StatusCreated, &timeOff)
 	})
+
 	admin := r.Group("/admin", gin.BasicAuth(gin.Accounts{
 		"admin": "admin",
 	}))
@@ -84,12 +111,8 @@ func registerRoutes() *gin.Engine {
 
 	admin.POST("/employees/:id", func(c *gin.Context) {
 		id := c.Param("id")
+
 		if id == "add" {
-			/*pto, err := strconv.ParseFloat(c.PostForm("pto"), 32)
-			if err != nil {
-				c.String(http.StatusBadRequest, err.Error())
-				return
-			}*/
 
 			startDate, err := time.Parse("2006-01-02", c.PostForm("startDate"))
 			if err != nil {
@@ -98,17 +121,9 @@ func registerRoutes() *gin.Engine {
 			}
 
 			var emp Employee
-			err = c.Bind(&emp)
-			if err != nil {
-				c.String(http.StatusBadRequest, err.Error())
-				return
-			}
+			c.Bind(&emp)
 			emp.ID = 42
-			//emp.FirstName = c.PostForm("firstName")
-			//emp.LastName = c.PostForm("lastName")
-			//emp.Position = c.PostForm("position")
 			emp.Status = "Active"
-			//emp.TotalPTO = float32(pto)
 			emp.StartDate = startDate
 			employees["42"] = emp
 
